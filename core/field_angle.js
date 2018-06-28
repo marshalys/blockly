@@ -54,6 +54,17 @@ Blockly.FieldAngle = function(opt_value, opt_validator) {
 goog.inherits(Blockly.FieldAngle, Blockly.FieldTextInput);
 
 /**
+ * Construct a FieldAngle from a JSON arg object.
+ * @param {!Object} options A JSON object with options (angle).
+ * @returns {!Blockly.FieldAngle} The new field instance.
+ * @package
+ * @nocollapse
+ */
+Blockly.FieldAngle.fromJson = function(options) {
+  return new Blockly.FieldAngle(options['angle']);
+};
+
+/**
  * Round angles to the nearest 15 degrees when using mouse.
  * Set to 0 to disable rounding.
  */
@@ -112,13 +123,13 @@ Blockly.FieldAngle.prototype.render_ = function() {
 
   // Update textElement.
   this.textElement_.textContent = this.getDisplayText_();
-  
+
   // Insert degree symbol.
   if (this.sourceBlock_.RTL) {
-     this.textElement_.insertBefore(this.symbol_, this.textElement_.firstChild);
-   } else {
-     this.textElement_.appendChild(this.symbol_);
-   }
+    this.textElement_.insertBefore(this.symbol_, this.textElement_.firstChild);
+  } else {
+    this.textElement_.appendChild(this.symbol_);
+  }
   this.updateWidth();
 };
 
@@ -174,11 +185,11 @@ Blockly.FieldAngle.prototype.showEditor_ = function() {
   }, svg);
   this.gauge_ = Blockly.utils.createSvgElement('path',
       {'class': 'blocklyAngleGauge'}, svg);
-  this.line_ = Blockly.utils.createSvgElement('line',{
-      'x1': Blockly.FieldAngle.HALF,
-      'y1': Blockly.FieldAngle.HALF,
-      'class': 'blocklyAngleLine',
-     }, svg);
+  this.line_ = Blockly.utils.createSvgElement('line', {
+    'x1': Blockly.FieldAngle.HALF,
+    'y1': Blockly.FieldAngle.HALF,
+    'class': 'blocklyAngleLine'
+  }, svg);
   // Draw markers around the edge.
   for (var angle = 0; angle < 360; angle += 15) {
     Blockly.utils.createSvgElement('line', {
@@ -203,8 +214,7 @@ Blockly.FieldAngle.prototype.showEditor_ = function() {
   this.moveWrapper1_ =
       Blockly.bindEvent_(circle, 'mousemove', this, this.onMouseMove);
   this.moveWrapper2_ =
-      Blockly.bindEvent_(this.gauge_, 'mousemove', this,
-      this.onMouseMove);
+      Blockly.bindEvent_(this.gauge_, 'mousemove', this, this.onMouseMove);
   this.updateGraph_();
 };
 
@@ -318,3 +328,5 @@ Blockly.FieldAngle.prototype.classValidator = function(text) {
   }
   return String(n);
 };
+
+Blockly.Field.register('field_angle', Blockly.FieldAngle);

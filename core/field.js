@@ -28,6 +28,7 @@
 
 goog.provide('Blockly.Field');
 
+goog.require('Blockly.Events.BlockChange');
 goog.require('Blockly.Gesture');
 
 goog.require('goog.asserts');
@@ -50,6 +51,52 @@ Blockly.Field = function(text, opt_validator) {
   this.size_ = new goog.math.Size(0, Blockly.BlockSvg.MIN_BLOCK_Y);
   this.setValue(text);
   this.setValidator(opt_validator);
+};
+
+/**
+ * The set of all registered fields, keyed by field type as used in the JSON
+ * definition of a block.
+ * @type {!Object<string, !{fromJson: Function}>}
+ * @private
+ */
+Blockly.Field.TYPE_MAP_ = {};
+
+/**
+ * Registers a field type. May also override an existing field type.
+ * Blockly.Field.fromJson uses this registry to find the appropriate field.
+ * @param {!string} type The field type name as used in the JSON definition.
+ * @param {!{fromJson: Function}} fieldClass The field class containing a
+ *     fromJson function that can construct an instance of the field.
+ * @throws {Error} if the type name is empty, or the fieldClass is not an
+ *     object containing a fromJson function.
+ */
+Blockly.Field.register = function(type, fieldClass) {
+  if (!goog.isString(type) || goog.string.isEmptyOrWhitespace(type)) {
+    throw new Error('Invalid field type "' + type + '"');
+  }
+  if (!goog.isObject(fieldClass) || !goog.isFunction(fieldClass.fromJson)) {
+    throw new Error('Field "' + fieldClass +
+        '" must have a fromJson function');
+  }
+  Blockly.Field.TYPE_MAP_[type] = fieldClass;
+};
+
+/**
+ * Construct a Field from a JSON arg object.
+ * Finds the appropriate registered field by the type name as registered using
+ * Blockly.Field.register.
+ * @param {!Object} options A JSON object with a type and options specific
+ *     to the field type.
+ * @returns {?Blockly.Field} The new field instance or null if a field wasn't
+ *     found with the given type name
+ * @package
+ */
+Blockly.Field.fromJson = function(options) {
+  var fieldClass = Blockly.Field.TYPE_MAP_[options['type']];
+  if (fieldClass) {
+    return fieldClass.fromJson(options);
+  }
+  return null;
 };
 
 /**
@@ -142,11 +189,13 @@ Blockly.Field.prototype.init = function() {
     this.fieldGroup_.style.display = 'none';
   }
   this.borderRect_ = Blockly.utils.createSvgElement('rect',
-      {'rx': 4,
-       'ry': 4,
-       'x': -Blockly.BlockSvg.SEP_SPACE_X / 2,
-       'y': 0,
-       'height': 16}, this.fieldGroup_, this.sourceBlock_.workspace);
+      {
+        'rx': 4,
+        'ry': 4,
+        'x': -Blockly.BlockSvg.SEP_SPACE_X / 2,
+        'y': 0,
+        'height': 16
+      }, this.fieldGroup_);
   /** @type {!Element} */
   this.textElement_ = Blockly.utils.createSvgElement('text',
       {'class': 'blocklyText', 'y': this.size_.height - 12.5},
@@ -155,8 +204,8 @@ Blockly.Field.prototype.init = function() {
   this.updateEditable();
   this.sourceBlock_.getSvgRoot().appendChild(this.fieldGroup_);
   this.mouseDownWrapper_ =
-      Blockly.bindEventWithChecks_(this.fieldGroup_, 'mousedown', this,
-      this.onMouseDown_);
+      Blockly.bindEventWithChecks_(
+          this.fieldGroup_, 'mousedown', this, this.onMouseDown_);
   // Force a render.
   this.render_();
 };
@@ -351,10 +400,13 @@ Blockly.Field.getCachedWidth = function(textElement) {
 
   // Attempt to compute fetch the width of the SVG text element.
   try {
-    width = textElement.getComputedTextLength();
+    if (goog.userAgent.IE || goog.userAgent.EDGE) {
+      width = textElement.getBBox().width;
+    } else {
+      width = textElement.getComputedTextLength();
+    }
   } catch (e) {
-    // MSIE 11 and Edge are known to throw "Unexpected call to method or
-    // property access." if the block is hidden. Instead, use an
+    // In other cases where we fail to geth the computed text. Instead, use an
     // approximation and do not cache the result. At some later point in time
     // when the block is inserted into the visible DOM, this method will be
     // called again and, at that point in time, will not throw an exception.
@@ -402,16 +454,23 @@ Blockly.Field.prototype.getSize = function() {
 };
 
 /**
- * Returns the height and width of the field,
- * accounting for the workspace scaling.
- * @return {!goog.math.Size} Height and width.
+ * Returns the bounding box of the rendered field, accounting for workspace
+ * scaling.
+ * @return {!Object} An object with top, bottom, left, and right in pixels
+ *     relative to the top left corner of the page (window coordinates).
  * @private
  */
 Blockly.Field.prototype.getScaledBBox_ = function() {
   var bBox = this.borderRect_.getBBox();
-  // Create new object, as getBBox can return an uneditable SVGRect in IE.
-  return new goog.math.Size(bBox.width * this.sourceBlock_.workspace.scale,
-                            bBox.height * this.sourceBlock_.workspace.scale);
+  var scaledHeight = bBox.height * this.sourceBlock_.workspace.scale;
+  var scaledWidth = bBox.width * this.sourceBlock_.workspace.scale;
+  var xy = this.getAbsoluteXY_();
+  return {
+    top: xy.y,
+    bottom: xy.y + scaledHeight,
+    left: xy.x,
+    right: xy.x + scaledWidth
+  };
 };
 
 /**
@@ -462,6 +521,17 @@ Blockly.Field.prototype.setText = function(newText) {
     return;
   }
   this.text_ = newText;
+  this.forceRerender();
+};
+
+/**
+ * Force a rerender of the block that this field is installed on, which will
+ * rerender this field and adjust for any sizing changes.
+ * Other fields on the same block will not rerender, because their sizes have
+ * already been recorded.
+ * @package
+ */
+Blockly.Field.prototype.forceRerender = function() {
   // Set width to 0 to force a rerender of this field.
   this.size_.width = 0;
 
@@ -516,13 +586,12 @@ Blockly.Field.prototype.onMouseDown_ = function(e) {
   }
 };
 
-
 /**
  * Change the tooltip text for this field.
- * @param {string|!Element} newTip Text for tooltip or a parent element to
+ * @param {string|!Element} _newTip Text for tooltip or a parent element to
  *     link to for its tooltip.
  */
-Blockly.Field.prototype.setTooltip = function(newTip) {
+Blockly.Field.prototype.setTooltip = function(_newTip) {
   // Non-abstract sub-classes may wish to implement this.  See FieldLabel.
 };
 

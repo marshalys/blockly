@@ -59,7 +59,9 @@
       <block type="controls_whileUntil"></block>
     </category>
     <category name="Math">
-      <block type="math_number"></block>
+      <block type="math_number">
+        <field name="NUM">123</field>
+      </block>
       <block type="math_arithmetic"></block>
       <block type="math_single"></block>
     </category>
@@ -132,11 +134,11 @@
   </xml>
 
   <script>
-    var workspace = Blockly.inject('blocklyDiv',
+    var demoWorkspace = Blockly.inject('blocklyDiv',
         {media: '../../media/',
          toolbox: document.getElementById('toolbox')});
     Blockly.Xml.domToWorkspace(document.getElementById('startBlocks'),
-                               workspace);
+                               demoWorkspace);
 
     // Exit is used to signal the end of a script.
     Blockly.JavaScript.addReservedWords('exit');
@@ -179,12 +181,12 @@
     var latestCode = '';
 
     function highlightBlock(id) {
-      workspace.highlightBlock(id);
+      demoWorkspace.highlightBlock(id);
       highlightPause = true;
     }
 
     function resetStepUi(clearOutput) {
-      workspace.highlightBlock(null);
+      demoWorkspace.highlightBlock(null);
       highlightPause = false;
       runButton.disabled = '';
 
@@ -197,7 +199,7 @@
       // Generate JavaScript code and parse it.
       Blockly.JavaScript.STATEMENT_PREFIX = 'highlightBlock(%1);\n';
       Blockly.JavaScript.addReservedWords('highlightBlock');
-      latestCode = Blockly.JavaScript.workspaceToCode(workspace);
+      latestCode = Blockly.JavaScript.workspaceToCode(demoWorkspace);
 
       resetStepUi(true);
     }
@@ -250,7 +252,7 @@
 
     // Load the interpreter now, and upon future changes.
     generateCodeAndLoadIntoInterpreter();
-    workspace.addChangeListener(function(event) {
+    demoWorkspace.addChangeListener(function(event) {
       if (!(event instanceof Blockly.Events.Ui)) {
         // Something changed. Parser needs to be reloaded.
         resetInterpreter();
